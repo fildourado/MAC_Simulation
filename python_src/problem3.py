@@ -20,7 +20,7 @@ SIFS = 15.0   # short interframe spacing microseconds
 DIFS = 60.0   # DCF interframe spacing microseconds
 tau = 2       # propagation delay
 
-SLOTS = 1000000    # Simulation time microseconds
+SLOTS = 100000    # Simulation time microseconds
 #SLOTS = 20
 """
 Simulation
@@ -49,5 +49,5 @@ for p in q:
 
 
 total_time = SLOTS*T*(1e-6)
-plt.plot(q, np.array(total_tx_count)/total_time)
+plt.plot(q, np.array(total_tx_count))
 plt.show()

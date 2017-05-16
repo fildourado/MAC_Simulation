@@ -61,8 +61,10 @@ class MAC_802_11(object):
         # update the channel state
         # if the channel was busy in the previous slot, check if node that was transmitting has finished
         if self.channel_state == 1:
-            if current_slt > self.tx_node_expiration:
+            if current_slt == self.tx_node_expiration:
                 self.channel_state = 0
+                # makae the node that just finished reset to idle
+                self.node_state[self.current_txing_node] = 0
                 self.tx_node_expiration = -1
                 self.total_tx_count += 1
                 self.current_txing_node = -1
@@ -94,18 +96,15 @@ class MAC_802_11(object):
             # then give it a random backoff
             prob_idx = np.where(probs < self.p)
             node_idx = idx[0][prob_idx[0]]
-            self.node_state[node_idx] = 3
+            self.node_state[node_idx] = 1
+            self.node_tx_count[node_idx] = 0
             #self.node_state[idx] = np.where(probs > self.p, self.tx_state[idx], 3)
 
-
-            # set the tx count to 1
-            self.node_tx_count[node_idx] = 1
-
-            Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
-            backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
+            #Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
+            #backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
             #backoff = np.int32(np.random.uniform(1, Wmax, self.N))
 
-            self.node_tx_schedule[node_idx] = current_slt + backoff
+            self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
 
 
         elif self.channel_state == 0:
@@ -113,12 +112,13 @@ class MAC_802_11(object):
 
             # check nodes that need to transmit right now
             idx1 = np.where(self.node_state == 1)
-            nodes_to_tx_now = idx1[0]
+            #nodes_to_tx_now = idx1[0]
+            nodes_to_tx_now = np.where(self.node_tx_schedule[idx1[0]] == current_slt)
+            nodes_to_tx_now = idx1[0][nodes_to_tx_now[0]]
 
             # check the re-txing nodes
             idx2 = np.where(self.node_state == 3)
             nodes_to_retx_now = np.where(self.node_tx_schedule[idx2[0]] == current_slt)
-
             nodes_to_retx_now = idx2[0][nodes_to_retx_now[0]]
 
             # get an array of nodes that need to tx now
@@ -135,24 +135,26 @@ class MAC_802_11(object):
                 # bad luck, it was time to transmit and channel just went active so we cant wait DIFS to retx, we have to wait a random backoff
                 prob_idx = np.where(probs < self.p)
                 node_idx = idx[0][prob_idx[0]]
-                self.node_state[node_idx] = 3
+                #self.node_state[node_idx] = 3
+                self.node_state[node_idx] = 1
 
-                self.node_tx_count[node_idx] = 1
-                Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
-                #print Wmax
-                backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
-                self.node_tx_schedule[node_idx] = current_slt + backoff
+                #self.node_tx_count[node_idx] = 1
+                self.node_tx_count[node_idx] = 0
+                #Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
+                ##print Wmax
+                #backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
+                self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
 
 
                 # there was a collision in this slot
                 # update node states
-                self.node_state[idx1] = 3
+                self.node_state[nodes_to_tx_now] = 3
 
                 # of the nodes that were in a single tx state, reset the tx counter
-                self.node_tx_count[idx1] = 0
+                self.node_tx_count[nodes_to_tx_now] = 1
 
                 # increase re tx count of nodes in re-tx state
-                self.node_tx_count[txing_nodes] += 1
+                self.node_tx_count[nodes_to_retx_now] += 1
 
                 # reset nodes that have timed out
                 idx_of_timed_out_nodes = np.where( self.node_tx_count[txing_nodes] == (self.rmax + 1) )
@@ -185,12 +187,13 @@ class MAC_802_11(object):
                 # we have to wait a random backoff
                 prob_idx = np.where(probs < self.p)
                 node_idx = idx[0][prob_idx[0]]
-                self.node_state[node_idx] = 3
-                self.node_tx_count[node_idx] = 1
-                Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
+                #self.node_state[node_idx] = 3
+                self.node_state[node_idx] = 1
+                self.node_tx_count[node_idx] = 0
+                #Wmax = (2 ** (self.node_tx_count[node_idx] - 1)) * self.Wmin
                 #backoff = np.int32(np.random.uniform(1, Wmax, self.N))
-                backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
-                self.node_tx_schedule[node_idx] = current_slt + backoff
+                #backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
+                self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
 
             else:
                 # keep the channel idle
@@ -204,7 +207,7 @@ class MAC_802_11(object):
                 # if any nodes need to transmit, make them wait DIFS
                 prob_idx = np.where(probs < self.p)
                 node_idx = idx[0][prob_idx[0]]
-                self.node_state[node_idx] =  1
+                self.node_state[node_idx] = 1
                 self.node_tx_count[node_idx] = 0
                 self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
 
