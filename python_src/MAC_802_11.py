@@ -25,7 +25,8 @@ class MAC_802_11(object):
         # useful manipulations of inputs
         self.DIFS_slt_cnt = np.int(np.ceil((1.0*self.DIFS) / self.T))
         self.packet_length_us = (1.0*(self.P + self.H)) / self.R
-        self.packet_slt_cnt = np.int(np.ceil((1.0*( self.packet_length_us + self.SIFS + self.tau)) / self.T))
+        self.packet_slt_cnt = np.int(np.ceil((1.0*( self.packet_length_us \
+                                                    + self.SIFS + self.tau)) / self.T))
         #print self.DIFS_slt_cnt
         #print self.packet_slt_cnt
 
@@ -53,9 +54,15 @@ class MAC_802_11(object):
         # tracks the total packet transmit count
         self.total_tx_count = 0
 
+        self.delay_tracker = 0;
+
+        self.desired_start_of_tx = np.zeros(N)
+        self.actual_start_of_tx = np.zeros(N)
+
         self.current_txing_node = -1
 
         self.Wmin = 4
+
 
     def update_channel_state(self, current_slt):
         # update the channel state
@@ -67,6 +74,7 @@ class MAC_802_11(object):
                 self.node_state[self.current_txing_node] = 0
                 self.tx_node_expiration = -1
                 self.total_tx_count += 1
+                self.delay_tracker += self.actual_start_of_tx[self.current_txing_node] - self.desired_start_of_tx[self.current_txing_node]
                 self.current_txing_node = -1
                 #print "successful transmission"
 
@@ -97,6 +105,7 @@ class MAC_802_11(object):
             prob_idx = np.where(probs < self.p)
             node_idx = idx[0][prob_idx[0]]
             self.node_state[node_idx] = 1
+
             self.node_tx_count[node_idx] = 0
             #self.node_state[idx] = np.where(probs > self.p, self.tx_state[idx], 3)
 
@@ -105,7 +114,7 @@ class MAC_802_11(object):
             #backoff = np.int32(np.random.uniform(1, Wmax, self.N))
 
             self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
-
+            self.desired_start_of_tx[node_idx] = self.node_tx_schedule[node_idx]
 
         elif self.channel_state == 0:
             #print "Channel is Idle"
@@ -144,7 +153,7 @@ class MAC_802_11(object):
                 ##print Wmax
                 #backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
                 self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
-
+                self.desired_start_of_tx[node_idx] = self.node_tx_schedule[node_idx]
 
                 # there was a collision in this slot
                 # update node states
@@ -163,13 +172,13 @@ class MAC_802_11(object):
                     self.node_state[idx_of_timed_out_nodes[0]] = 0
                     self.node_tx_schedule[idx_of_timed_out_nodes[0]] = -1
                     self.node_tx_count[idx_of_timed_out_nodes[0]] = 0
+                    self.desired_start_of_tx[idx_of_timed_out_nodes[0]] = 0
 
                 Wmax = (2**(self.node_tx_count - 1))*self.Wmin
 
                 backoff = np.int32(np.random.uniform(1, Wmax, self.N))
 
                 self.node_tx_schedule[txing_nodes] = current_slt + backoff[txing_nodes]
-
 
             elif len(txing_nodes) == 1:
                 #print "One node needs to TX:"
@@ -182,6 +191,7 @@ class MAC_802_11(object):
                 self.current_txing_node = txing_nodes[0]
                 self.tx_node_expiration = current_slt + self.packet_slt_cnt - 1
                 self.node_state[txing_nodes[0]] = 2
+                self.actual_start_of_tx[txing_nodes] = current_slt
 
                 # bad luck, it was time to transmit and channel just went active so we cant wait DIFS to retx,
                 # we have to wait a random backoff
@@ -194,6 +204,7 @@ class MAC_802_11(object):
                 #backoff = np.int32(np.random.uniform(1, Wmax, self.N))
                 #backoff = np.int32(np.random.uniform(1, Wmax, len(node_idx)))
                 self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
+                self.desired_start_of_tx[node_idx] = self.node_tx_schedule[node_idx]
 
             else:
                 # keep the channel idle
@@ -210,6 +221,7 @@ class MAC_802_11(object):
                 self.node_state[node_idx] = 1
                 self.node_tx_count[node_idx] = 0
                 self.node_tx_schedule[node_idx] = current_slt + self.DIFS_slt_cnt
+                self.desired_start_of_tx[node_idx] = self.node_tx_schedule[node_idx]
 
         else:
             print "Channel Error"
